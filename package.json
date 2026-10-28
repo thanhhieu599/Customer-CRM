@@ -1,0 +1,17 @@
+{
+  "name": "customer-care-crm",
+  "private": true,
+  "version": "0.1.0",
+  "description": "D&T Customer Care CRM – MVP (NestJS + Next.js + PostgreSQL + Prisma + BullMQ)",
+  "workspaces": ["apps/api", "apps/web"],
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "dev:api": "npm run start:dev -w apps/api",
+    "dev:web": "npm run dev -w apps/web",
+    "db:migrate": "npm run prisma:migrate -w apps/api",
+    "db:seed": "npm run prisma:seed -w apps/api",
+    "build": "npm run build -w apps/api && npm run build -w apps/web",
+    "lint": "npm run lint -w apps/api && npm run lint -w apps/web",
+    "test": "npm test -w apps/api"
+  }
+}
