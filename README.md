@@ -11,7 +11,7 @@ Không chỉ lưu thông tin – hệ thống **chủ động** cho nhân viên 
 
 | Thành phần | Công nghệ |
 |---|---|
-| Frontend | Next.js 16 (App Router) + React 19 + TypeScript, Tailwind CSS 4, component theo chuẩn shadcn/ui, Recharts, SWR |
+| Frontend | Next.js 16 (App Router) + React 19 + TypeScript, Tailwind CSS 4|
 | Backend | NestJS 11 (modular monolith) + TypeScript |
 | Database | PostgreSQL 16 + Prisma ORM 7 |
 | Jobs / tự động hóa | Redis + BullMQ (lịch chạy 01:00 hằng ngày, kiểm tra SLA mỗi 15 phút) |
