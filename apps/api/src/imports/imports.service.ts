@@ -47,10 +47,22 @@ const pick = (row: Row, names: readonly string[]) => {
 };
 
 const CONTACT_ROLES: Record<string, ContactRole> = {
-  purchasing: 'PURCHASING', 'mua hang': 'PURCHASING', 'mua hàng': 'PURCHASING',
-  ehs: 'EHS', hse: 'EHS', 'an toan': 'EHS', 'an toàn': 'EHS',
-  qa: 'QA', qc: 'QA', warehouse: 'WAREHOUSE', kho: 'WAREHOUSE',
-  admin: 'ADMIN', 'hanh chinh': 'ADMIN', 'hành chính': 'ADMIN', production: 'PRODUCTION', 'san xuat': 'PRODUCTION',
+  purchasing: 'PURCHASING',
+  'mua hang': 'PURCHASING',
+  'mua hàng': 'PURCHASING',
+  ehs: 'EHS',
+  hse: 'EHS',
+  'an toan': 'EHS',
+  'an toàn': 'EHS',
+  qa: 'QA',
+  qc: 'QA',
+  warehouse: 'WAREHOUSE',
+  kho: 'WAREHOUSE',
+  admin: 'ADMIN',
+  'hanh chinh': 'ADMIN',
+  'hành chính': 'ADMIN',
+  production: 'PRODUCTION',
+  'san xuat': 'PRODUCTION',
 };
 
 export interface ImportReport {
@@ -73,7 +85,9 @@ export class ImportsService {
     this.requireColumns(rows, CUSTOMER_COLUMNS.code, CUSTOMER_COLUMNS.name);
     const log = await this.prisma.syncLog.create({ data: { system, kind: 'customers' } });
     const report: ImportReport = { rows: rows.length, created: 0, updated: 0, skipped: 0, errors: [] };
-    const users = new Map((await this.prisma.user.findMany({ select: { id: true, email: true } })).map((u) => [u.email, u.id]));
+    const users = new Map(
+      (await this.prisma.user.findMany({ select: { id: true, email: true } })).map((u) => [u.email, u.id]),
+    );
     const seen = new Set<string>();
 
     for (const [i, row] of rows.entries()) {
@@ -98,7 +112,9 @@ export class ImportsService {
         const data = {
           name,
           taxCode,
-          type: (pick(row, CUSTOMER_COLUMNS.type)?.toUpperCase() === 'INDIVIDUAL' ? 'INDIVIDUAL' : 'COMPANY') as CustomerType,
+          type: (pick(row, CUSTOMER_COLUMNS.type)?.toUpperCase() === 'INDIVIDUAL'
+            ? 'INDIVIDUAL'
+            : 'COMPANY') as CustomerType,
           industry: pick(row, CUSTOMER_COLUMNS.industry),
           tier: tier && ['A', 'B', 'C'].includes(tier) ? tier : undefined,
           source: pick(row, CUSTOMER_COLUMNS.source),
@@ -113,7 +129,8 @@ export class ImportsService {
         const existingId = await this.findCustomerId(system, code, taxCode);
         let id: string;
         if (existingId) {
-          id = (await this.prisma.customer.update({ where: { id: existingId }, data: { ...data, deletedAt: null } })).id;
+          id = (await this.prisma.customer.update({ where: { id: existingId }, data: { ...data, deletedAt: null } }))
+            .id;
           report.updated++;
         } else {
           id = (await this.prisma.customer.create({ data: { code, ...data } })).id;
@@ -136,7 +153,13 @@ export class ImportsService {
 
   async importOrders(csv: string, system: string, userId: string): Promise<ImportReport> {
     const rows = parseCsv(csv);
-    this.requireColumns(rows, ORDER_COLUMNS.orderCode, ORDER_COLUMNS.customerCode, ORDER_COLUMNS.orderDate, ORDER_COLUMNS.sku);
+    this.requireColumns(
+      rows,
+      ORDER_COLUMNS.orderCode,
+      ORDER_COLUMNS.customerCode,
+      ORDER_COLUMNS.orderDate,
+      ORDER_COLUMNS.sku,
+    );
     const log = await this.prisma.syncLog.create({ data: { system, kind: 'orders' } });
     const report: ImportReport = { rows: rows.length, created: 0, updated: 0, skipped: 0, errors: [] };
 
@@ -165,7 +188,11 @@ export class ImportsService {
         const deliveredAt = parseDay(pick(first, ORDER_COLUMNS.deliveredDate));
         const rawStatus = pick(first, ORDER_COLUMNS.status)?.toUpperCase();
         const status: OrderStatus =
-          rawStatus === 'CANCELED' || rawStatus === 'HUY' ? 'CANCELED' : deliveredAt || rawStatus === 'DELIVERED' ? 'DELIVERED' : 'CONFIRMED';
+          rawStatus === 'CANCELED' || rawStatus === 'HUY'
+            ? 'CANCELED'
+            : deliveredAt || rawStatus === 'DELIVERED'
+              ? 'DELIVERED'
+              : 'CONFIRMED';
 
         const items = g.rows.map((r) => {
           const sku = pick(r, ORDER_COLUMNS.sku)?.trim();
@@ -173,10 +200,20 @@ export class ImportsService {
           const quantity = parseNumber(pick(r, ORDER_COLUMNS.quantity)) ?? 0;
           const unitPrice = parseNumber(pick(r, ORDER_COLUMNS.unitPrice)) ?? 0;
           const amount = parseNumber(pick(r, ORDER_COLUMNS.amount)) ?? quantity * unitPrice;
-          return { sku, productName: pick(r, ORDER_COLUMNS.productName) ?? sku, quantity, unit: pick(r, ORDER_COLUMNS.unit), unitPrice, amount };
+          return {
+            sku,
+            productName: pick(r, ORDER_COLUMNS.productName) ?? sku,
+            quantity,
+            unit: pick(r, ORDER_COLUMNS.unit),
+            unitPrice,
+            amount,
+          };
         });
 
-        const result = await this.orders.upsert({ code, customerId, orderDate, deliveredAt, status, source: system, items }, null);
+        const result = await this.orders.upsert(
+          { code, customerId, orderDate, deliveredAt, status, source: system, items },
+          null,
+        );
         await this.prisma.externalIdMapping.upsert({
           where: { system_entityType_externalId: { system, entityType: 'order', externalId: code } },
           create: { system, entityType: 'order', externalId: code, entityId: result.id },
@@ -198,13 +235,32 @@ export class ImportsService {
     const mapped = await this.prisma.externalIdMapping.findUnique({
       where: { system_entityType_externalId: { system, entityType: 'customer', externalId: code } },
     });
-    if (mapped) return mapped.entityId;
+    if (mapped) return this.resolveCustomer(mapped.entityId);
     if (taxCode) {
       const byTax = await this.prisma.customer.findUnique({ where: { taxCode }, select: { id: true } });
-      if (byTax) return byTax.id;
+      if (byTax) return this.resolveCustomer(byTax.id);
     }
     const byCode = await this.prisma.customer.findUnique({ where: { code }, select: { id: true } });
-    return byCode?.id ?? null;
+    return byCode ? this.resolveCustomer(byCode.id) : null;
+  }
+
+  /** Follow merge tombstones across import systems; never resurrect a merged source. */
+  private async resolveCustomer(id: string): Promise<string | null> {
+    const seen = new Set<string>();
+    while (!seen.has(id)) {
+      seen.add(id);
+      const customer = await this.prisma.customer.findUnique({
+        where: { id },
+        select: { id: true, deletedAt: true, mergedIntoId: true },
+      });
+      if (!customer) return null;
+      if (customer.mergedIntoId) {
+        id = customer.mergedIntoId;
+        continue;
+      }
+      return customer.deletedAt ? null : customer.id;
+    }
+    throw new BadRequestException('Liên kết hợp nhất khách không hợp lệ');
   }
 
   private async upsertContact(customerId: string, row: Row) {
@@ -246,11 +302,14 @@ export class ImportsService {
         finishedAt: new Date(),
       },
     });
-    await this.prisma.auditLog.create({ data: { userId, action: 'import', entityType: 'SyncLog', entityId: logId, changes: stats } });
+    await this.prisma.auditLog.create({
+      data: { userId, action: 'import', entityType: 'SyncLog', entityId: logId, changes: stats },
+    });
   }
 
   private message(e: unknown): string {
-    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') return 'Trùng mã số thuế với khách hàng khác';
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002')
+      return 'Trùng mã số thuế với khách hàng khác';
     return (e as Error).message;
   }
 }

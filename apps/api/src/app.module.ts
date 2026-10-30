@@ -17,6 +17,8 @@ import { RetentionModule } from './retention/retention.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { HealthModule } from './health/health.module';
+import { SalesModule } from './sales/sales.module';
+import { WorkspaceModule } from './workspace/workspace.module';
 
 @Module({
   imports: [
@@ -35,6 +37,8 @@ import { HealthModule } from './health/health.module';
     DashboardModule,
     NotificationsModule,
     HealthModule,
+    SalesModule,
+    WorkspaceModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

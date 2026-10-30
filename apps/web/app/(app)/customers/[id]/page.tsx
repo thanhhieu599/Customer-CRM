@@ -106,6 +106,7 @@ export default function Customer360Page() {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2 text-sm">
+          <Link href={`/opportunities?customerId=${id}`} className="rounded border px-3 py-2 text-primary hover:bg-muted">Cơ hội & Báo giá</Link>
           <span className="text-muted-foreground">Phụ trách</span>
           {isManager ? (
             <Select value={c.owner?.id ?? ''} onChange={(e) => patch({ ownerId: e.target.value || null })} className="w-48" aria-label="Người phụ trách">

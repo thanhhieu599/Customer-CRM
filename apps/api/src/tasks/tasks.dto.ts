@@ -27,15 +27,25 @@ export class UpdateTaskDto {
   @IsOptional() @IsString() @MinLength(3) title?: string;
   @IsOptional() @IsString() description?: string;
   @IsOptional() @IsEnum(Priority) priority?: Priority;
-  @IsOptional() @IsEnum(TaskStatus) status?: TaskStatus;
+  @IsOptional() @IsIn(['OPEN', 'IN_PROGRESS', 'CANCELED']) status?: TaskStatus;
   @IsOptional() @IsDateString() dueAt?: string;
   @IsOptional() @IsUUID() assigneeId?: string;
 }
 
 export class CompleteTaskDto {
-  @IsString() @MinLength(3) result: string;
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString()
+  @MinLength(3)
+  result: string;
   /** Also log the result on the customer timeline (default true). */
-  @IsOptional() @Transform(({ value }) => value !== false && value !== 'false') @IsBoolean() logActivity?: boolean = true;
-  @IsOptional() @IsIn(['CALL', 'EMAIL', 'ZALO', 'MEETING', 'VISIT', 'NOTE']) activityType?: 'CALL' | 'EMAIL' | 'ZALO' | 'MEETING' | 'VISIT' | 'NOTE';
+  @IsOptional() @Transform(({ value }) => value !== false && value !== 'false') @IsBoolean() logActivity?: boolean =
+    true;
+  @IsOptional() @IsIn(['CALL', 'EMAIL', 'ZALO', 'MEETING', 'VISIT', 'NOTE']) activityType?:
+    | 'CALL'
+    | 'EMAIL'
+    | 'ZALO'
+    | 'MEETING'
+    | 'VISIT'
+    | 'NOTE';
   @IsOptional() @IsEnum(ActivityOutcome) outcome?: ActivityOutcome;
 }

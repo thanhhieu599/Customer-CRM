@@ -9,6 +9,8 @@ import { ROLE } from '@/lib/labels';
 import { cn } from '@/lib/utils';
 
 const NAV = [
+  { href: '/workbench', label: 'Ngày làm việc', icon: ClipboardList },
+  { href: '/opportunities', label: 'Cơ hội & Báo giá', icon: LayoutDashboard },
   { href: '/dashboard', label: 'Tổng quan', icon: LayoutDashboard },
   { href: '/tasks', label: 'Việc cần làm', icon: ClipboardList },
   { href: '/customers', label: 'Khách hàng', icon: Users },

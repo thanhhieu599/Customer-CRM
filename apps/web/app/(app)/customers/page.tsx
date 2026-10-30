@@ -1,8 +1,9 @@
 'use client';
 import Link from 'next/link';
-import { FormEvent, Suspense, useEffect, useState } from 'react';
+import { FormEvent, Suspense, useEffect, useState, useTransition } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import useSWR from 'swr';
+import { CustomerTools } from '@/components/customer-tools';
 import { api, fetcher, Paged } from '@/lib/api';
 import { daysAgo, money } from '@/lib/format';
 import { HEALTH, SEGMENT } from '@/lib/labels';
@@ -38,22 +39,39 @@ function CustomersInner() {
   const users = useUsers();
   const [q, setQ] = useState(params.get('q') ?? '');
   const [creating, setCreating] = useState(false);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [pending, startTransition] = useTransition();
+  const filterKey = params.toString();
   const filters = {
     q: params.get('q') ?? '',
     segment: params.get('segment') ?? '',
     healthLevel: params.get('healthLevel') ?? '',
+    tag: params.get('tag') ?? '',
+    lastContactDays: params.get('lastContactDays') ?? '',
     ownerId: params.get('ownerId') ?? '',
     sort: params.get('sort') ?? 'healthScore',
     order: params.get('order') ?? 'asc',
     page: Number(params.get('page') ?? 1),
   };
-  const qs = new URLSearchParams(Object.entries({ ...filters, page: String(filters.page), pageSize: '25' }).filter(([, v]) => v !== '') as [string, string][]);
-  const { data, error, isLoading } = useSWR<Paged<CustomerRow>>(`/customers?${qs}`, fetcher, { keepPreviousData: true });
+  const qs = new URLSearchParams(
+    Object.entries({ ...filters, page: String(filters.page), pageSize: '25' }).filter(([, v]) => v !== '') as [
+      string,
+      string,
+    ][],
+  );
+  const { data, error, isLoading, mutate } = useSWR<Paged<CustomerRow>>(`/customers?${qs}`, fetcher, {
+    keepPreviousData: true,
+  });
+
+  useEffect(() => {
+    setSelected([]);
+    setQ(new URLSearchParams(filterKey).get('q') ?? '');
+  }, [filterKey]);
 
   const set = (patch: Record<string, string>) => {
     const next = new URLSearchParams(params);
     Object.entries({ page: '1', ...patch }).forEach(([k, v]) => (v ? next.set(k, v) : next.delete(k)));
-    router.replace(`/customers?${next}`);
+    startTransition(() => router.replace(`/customers?${next}`));
   };
 
   useEffect(() => {
@@ -69,10 +87,42 @@ function CustomersInner() {
         subtitle={data ? `${data.total} khách hàng` : undefined}
         actions={<Button onClick={() => setCreating(true)}>Thêm khách hàng</Button>}
       />
-      <NewCustomer open={creating} onClose={() => setCreating(false)} onCreated={(id) => router.push(`/customers/${id}`)} />
+      <NewCustomer
+        open={creating}
+        onClose={() => setCreating(false)}
+        onCreated={(id) => router.push(`/customers/${id}`)}
+      />
       <div className="mb-3 flex flex-wrap gap-2">
-        <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Tìm tên, mã KH, MST, SĐT, người liên hệ…" className="max-w-xs" />
-        <Select value={filters.segment} onChange={(e) => set({ segment: e.target.value })} className="w-44" aria-label="Phân khúc">
+        <Input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Tìm tên, mã KH, MST, SĐT, người liên hệ…"
+          className="max-w-xs"
+        />
+        <Input
+          className="w-36"
+          aria-label="Lọc theo tag"
+          placeholder="Tag"
+          value={filters.tag}
+          onChange={(e) => set({ tag: e.target.value })}
+        />
+        <Select
+          className="w-44"
+          aria-label="Lâu chưa liên hệ"
+          value={filters.lastContactDays}
+          onChange={(e) => set({ lastContactDays: e.target.value })}
+        >
+          <option value="">Mọi lần liên hệ</option>
+          <option value="7">Chưa liên hệ 7 ngày</option>
+          <option value="30">Chưa liên hệ 30 ngày</option>
+          <option value="60">Chưa liên hệ 60 ngày</option>
+        </Select>
+        <Select
+          value={filters.segment}
+          onChange={(e) => set({ segment: e.target.value })}
+          className="w-44"
+          aria-label="Phân khúc"
+        >
           <option value="">Mọi phân khúc</option>
           {Object.entries(SEGMENT).map(([k, v]) => (
             <option key={k} value={k}>
@@ -80,7 +130,12 @@ function CustomersInner() {
             </option>
           ))}
         </Select>
-        <Select value={filters.healthLevel} onChange={(e) => set({ healthLevel: e.target.value })} className="w-40" aria-label="Sức khỏe">
+        <Select
+          value={filters.healthLevel}
+          onChange={(e) => set({ healthLevel: e.target.value })}
+          className="w-40"
+          aria-label="Sức khỏe"
+        >
           <option value="">Mọi mức sức khỏe</option>
           {Object.entries(HEALTH).map(([k, v]) => (
             <option key={k} value={k}>
@@ -89,7 +144,12 @@ function CustomersInner() {
           ))}
         </Select>
         {users.length > 0 && (
-          <Select value={filters.ownerId} onChange={(e) => set({ ownerId: e.target.value })} className="w-44" aria-label="Người phụ trách">
+          <Select
+            value={filters.ownerId}
+            onChange={(e) => set({ ownerId: e.target.value })}
+            className="w-44"
+            aria-label="Người phụ trách"
+          >
             <option value="">Mọi người phụ trách</option>
             {users.map((u) => (
               <option key={u.id} value={u.id}>
@@ -98,7 +158,15 @@ function CustomersInner() {
             ))}
           </Select>
         )}
-        <Select value={`${filters.sort}:${filters.order}`} onChange={(e) => { const [sort, order] = e.target.value.split(':'); set({ sort, order }); }} className="w-52" aria-label="Sắp xếp">
+        <Select
+          value={`${filters.sort}:${filters.order}`}
+          onChange={(e) => {
+            const [sort, order] = e.target.value.split(':');
+            set({ sort, order });
+          }}
+          className="w-52"
+          aria-label="Sắp xếp"
+        >
           <option value="healthScore:asc">Sức khỏe thấp nhất trước</option>
           <option value="lastOrderAt:asc">Lâu chưa mua nhất trước</option>
           <option value="revenue12m:desc">Doanh thu 12 tháng cao nhất</option>
@@ -107,6 +175,19 @@ function CustomersInner() {
         </Select>
       </div>
 
+      <CustomerTools
+        filters={filters}
+        selected={selected}
+        apply={(saved) => {
+          const next = new URLSearchParams(Object.entries(saved).filter(([, v]) => v !== ''));
+          setQ(saved.q ?? '');
+          startTransition(() => router.replace(`/customers?${next}`));
+        }}
+        onDone={() => {
+          setSelected([]);
+          void mutate();
+        }}
+      />
       {error && <ErrorBox error={error} />}
       <Card>
         {isLoading && !data ? (
@@ -117,6 +198,15 @@ function CustomersInner() {
           <Table>
             <thead>
               <tr>
+                <Th>
+                  <input
+                    type="checkbox"
+                    aria-label="Chọn tất cả khách trên trang"
+                    disabled={pending || isLoading}
+                    checked={!!data?.items.length && selected.length === data.items.length}
+                    onChange={(e) => setSelected(e.target.checked ? data!.items.map((c) => c.id) : [])}
+                  />
+                </Th>
                 <Th>Khách hàng</Th>
                 <Th>Phân khúc</Th>
                 <Th>Sức khỏe</Th>
@@ -132,6 +222,17 @@ function CustomersInner() {
                 const late = ago !== null && c.orderCycleDays && ago > c.orderCycleDays * 1.3;
                 return (
                   <Tr key={c.id}>
+                    <Td>
+                      <input
+                        type="checkbox"
+                        aria-label={`Chọn ${c.code}`}
+                        disabled={pending || isLoading}
+                        checked={selected.includes(c.id)}
+                        onChange={(e) =>
+                          setSelected(e.target.checked ? [...selected, c.id] : selected.filter((id) => id !== c.id))
+                        }
+                      />
+                    </Td>
                     <Td>
                       <Link href={`/customers/${c.id}`} className="font-medium hover:underline">
                         {c.name}
@@ -150,7 +251,9 @@ function CustomersInner() {
                     </Td>
                     <Td className={late ? 'text-rose-700' : ''}>
                       {ago === null ? '—' : `${ago} ngày trước`}
-                      {c.orderCycleDays && <div className="text-xs text-muted-foreground">chu kỳ ≈{c.orderCycleDays} ngày</div>}
+                      {c.orderCycleDays && (
+                        <div className="text-xs text-muted-foreground">chu kỳ ≈{c.orderCycleDays} ngày</div>
+                      )}
                     </Td>
                     <Td className="text-right tabular-nums">{money(c.revenue12m)}</Td>
                     <Td>{c._count.tickets ? <Badge tone="rose">{c._count.tickets}</Badge> : '—'}</Td>
@@ -164,13 +267,23 @@ function CustomersInner() {
       </Card>
       {data && data.total > data.pageSize && (
         <div className="mt-3 flex items-center justify-end gap-2 text-sm">
-          <Button variant="outline" size="sm" disabled={filters.page <= 1} onClick={() => set({ page: String(filters.page - 1) })}>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={filters.page <= 1}
+            onClick={() => set({ page: String(filters.page - 1) })}
+          >
             Trước
           </Button>
           <span>
             Trang {filters.page}/{Math.ceil(data.total / data.pageSize)}
           </span>
-          <Button variant="outline" size="sm" disabled={filters.page * data.pageSize >= data.total} onClick={() => set({ page: String(filters.page + 1) })}>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={filters.page * data.pageSize >= data.total}
+            onClick={() => set({ page: String(filters.page + 1) })}
+          >
             Sau
           </Button>
         </div>
@@ -187,7 +300,15 @@ export default function CustomersPage() {
   );
 }
 
-function NewCustomer({ open, onClose, onCreated }: { open: boolean; onClose: () => void; onCreated: (id: string) => void }) {
+function NewCustomer({
+  open,
+  onClose,
+  onCreated,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onCreated: (id: string) => void;
+}) {
   const [form, setForm] = useState({ code: '', name: '', taxCode: '', industry: '', phone: '', address: '' });
   const [error, setError] = useState('');
   async function submit(e: FormEvent) {

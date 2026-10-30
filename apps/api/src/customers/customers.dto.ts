@@ -1,5 +1,17 @@
 import { Type } from 'class-transformer';
-import { IsBoolean, IsEmail, IsEnum, IsIn, IsInt, IsOptional, IsString, IsUUID, MaxLength, Min } from 'class-validator';
+import {
+  IsBoolean,
+  IsEmail,
+  IsEnum,
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Max,
+  MaxLength,
+  Min,
+} from 'class-validator';
 import { PageQuery } from '../common/pagination';
 import { ContactRole, CustomerSegment, CustomerType, HealthLevel } from '../generated/prisma/client';
 
@@ -9,6 +21,7 @@ export class CustomerQuery extends PageQuery {
   @IsOptional() @IsEnum(HealthLevel) healthLevel?: HealthLevel;
   @IsOptional() @IsUUID() ownerId?: string;
   @IsOptional() @IsString() tag?: string;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(3650) lastContactDays?: number;
   @IsOptional() @IsIn(['name', 'healthScore', 'lastOrderAt', 'revenue12m', 'createdAt']) sort?: string;
   @IsOptional() @IsIn(['asc', 'desc']) order?: 'asc' | 'desc';
 }

@@ -1,10 +1,11 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { AuthUser, seesAll } from '../common/current-user';
 import { paged, skipTake } from '../common/pagination';
 import { startOfBusinessDay } from '../common/business-time';
 import { Prisma } from '../generated/prisma/client';
+import { atomic } from '../common/transaction';
 import { assertCustomerAccess } from '../customers/customer-access';
 import { CompleteTaskDto, CreateTaskDto, TaskQuery, UpdateTaskDto } from './tasks.dto';
 
@@ -25,8 +26,10 @@ export class TasksService {
 
     const now = new Date();
     if (q.view === 'overdue') Object.assign(where, { status: { in: [...OPEN] }, dueAt: { lt: now } });
-    if (q.view === 'today') Object.assign(where, { status: { in: [...OPEN] }, dueAt: { lt: startOfBusinessDay(undefined, 1) } });
-    if (q.view === 'week') Object.assign(where, { status: { in: [...OPEN] }, dueAt: { lt: startOfBusinessDay(undefined, 7) } });
+    if (q.view === 'today')
+      Object.assign(where, { status: { in: [...OPEN] }, dueAt: { lt: startOfBusinessDay(undefined, 1) } });
+    if (q.view === 'week')
+      Object.assign(where, { status: { in: [...OPEN] }, dueAt: { lt: startOfBusinessDay(undefined, 7) } });
     if (q.view === 'open') Object.assign(where, { status: { in: [...OPEN] } });
 
     const [items, total] = await Promise.all([
@@ -76,14 +79,20 @@ export class TasksService {
 
   /** Close a task with its result; by default the result goes on the customer timeline. */
   async complete(user: AuthUser, id: string, dto: CompleteTaskDto) {
-    const task = await this.load(user, id);
-    const now = new Date();
-    const ops: Prisma.PrismaPromise<unknown>[] = [
-      this.prisma.task.update({ where: { id }, data: { status: 'DONE', completedAt: now, result: dto.result } }),
-    ];
-    if (dto.logActivity !== false && task.customerId) {
-      ops.push(
-        this.prisma.activity.create({
+    await this.load(user, id);
+    return atomic(this.prisma, async (tx) => {
+      const task = await tx.task.findUniqueOrThrow({
+        where: { id },
+        include: { customer: { select: { ownerId: true } } },
+      });
+      if (!seesAll(user) && task.assigneeId !== user.id && task.customer?.ownerId !== user.id)
+        throw new ForbiddenException();
+      if (!['OPEN', 'IN_PROGRESS'].includes(task.status))
+        throw new ConflictException('Công việc đã hoàn thành hoặc đã hủy');
+      const now = new Date();
+      await tx.task.update({ where: { id }, data: { status: 'DONE', completedAt: now, result: dto.result } });
+      if (dto.logActivity !== false && task.customerId) {
+        await tx.activity.create({
           data: {
             customerId: task.customerId,
             userId: user.id,
@@ -92,13 +101,12 @@ export class TasksService {
             content: `${task.title}\n→ ${dto.result}`,
             metadata: { taskId: id },
           },
-        }),
-        this.prisma.customer.update({ where: { id: task.customerId }, data: { lastActivityAt: now } }),
-      );
-    }
-    await this.prisma.$transaction(ops);
-    await this.audit.log({ userId: user.id, action: 'complete', entityType: 'Task', entityId: id });
-    return { ok: true };
+        });
+        await tx.customer.update({ where: { id: task.customerId }, data: { lastActivityAt: now } });
+      }
+      await tx.auditLog.create({ data: { userId: user.id, action: 'complete', entityType: 'Task', entityId: id } });
+      return { ok: true };
+    });
   }
 
   private visibility(user: AuthUser, assignee?: string): Prisma.TaskWhereInput {
@@ -112,7 +120,10 @@ export class TasksService {
   }
 
   private async load(user: AuthUser, id: string) {
-    const task = await this.prisma.task.findUnique({ where: { id }, include: { customer: { select: { ownerId: true } } } });
+    const task = await this.prisma.task.findUnique({
+      where: { id },
+      include: { customer: { select: { ownerId: true } } },
+    });
     if (!task) throw new NotFoundException();
     if (!seesAll(user) && task.assigneeId !== user.id && task.customer?.ownerId !== user.id) {
       throw new ForbiddenException();

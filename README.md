@@ -26,14 +26,14 @@ Không chỉ lưu thông tin – hệ thống **chủ động** cho nhân viên 
 - **Retention Engine** (rule-based, giải thích được) – 6 quy tắc tạo việc cho người, có **idempotency key** chống tạo trùng, giới hạn số việc mỗi lần chạy, tự đóng việc khi khách đã đặt hàng lại.
 - **Dashboard KPI**: khách cần chăm sóc, việc quá hạn, tỷ lệ hoàn thành, SLA ticket, thời gian phản hồi, tỷ lệ mua lại (theo tháng), doanh thu mua lại, tỷ lệ kích hoạt lại, tỷ lệ chăm sóc → có đơn, **bảng hiệu suất từng nhân viên**.
 - **Nhập CSV** khách hàng & đơn hàng (tiêu đề tiếng Việt kiểu MISA, số `1.234.567`, ngày `DD/MM/YYYY`), chống trùng qua `external_id_mappings`, nhập lại không tạo trùng, nhật ký đồng bộ.
-- Kiểm thử: 31 unit test (thuật toán) + 7 e2e test (PostgreSQL + Redis thật) chạy trên GitHub Actions.
+- Kiểm thử: 44 unit test, 29 e2e backend (PostgreSQL + Redis thật), 5 luồng trình duyệt Playwright; đã cấu hình GitHub Actions.
 
 ## Chạy trên máy dev (5 phút)
 
 Yêu cầu: Node.js 22, Docker (hoặc PostgreSQL 16 + Redis 7 cài sẵn).
 
 ```bash
-npm install
+npm ci
 ```
 
 ```bash
@@ -45,7 +45,7 @@ cp apps/api/.env.example apps/api/.env
 ```
 
 ```bash
-npm run db:migrate && npm run db:seed
+npm run prisma:deploy:wasm -w apps/api && npm run db:seed
 ```
 
 Mở 2 terminal:
@@ -86,3 +86,9 @@ docs/                     Kiến trúc, lộ trình 30 ngày, triển khai, KPI,
 
 
 
+
+## Đợt 1 — Sales / CSKH
+
+Đã bổ sung pipeline cơ hội, báo giá nhiều phiên bản có PDF tiếng Việt và nhắc theo dõi,
+trang ngày làm việc, bộ lọc riêng/thao tác khách hàng hàng loạt và xem trước hợp nhất khách trùng.
+Xem [quy tắc nghiệp vụ, phân quyền và cách kiểm thử](docs/DOT-1-SALES-CSKH.md).

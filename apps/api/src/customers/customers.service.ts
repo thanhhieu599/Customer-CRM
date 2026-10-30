@@ -1,7 +1,7 @@
-import { ConflictException, Injectable } from '@nestjs/common';
+import { ConflictException, ForbiddenException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
-import { AuthUser } from '../common/current-user';
+import { AuthUser, seesAll } from '../common/current-user';
 import { paged, skipTake } from '../common/pagination';
 import { Prisma } from '../generated/prisma/client';
 import { ReorderService } from '../retention/reorder.service';
@@ -21,15 +21,29 @@ export class CustomersService {
       ...customerScope(user),
       ...(q.segment && { segment: q.segment }),
       ...(q.healthLevel && { healthLevel: q.healthLevel }),
-      ...(q.ownerId && { ownerId: q.ownerId }),
+      ...(seesAll(user) && q.ownerId && { ownerId: q.ownerId }),
       ...(q.tag && { tags: { some: { tag: { name: q.tag } } } }),
+      ...(q.lastContactDays && {
+        AND: [
+          {
+            OR: [
+              { lastActivityAt: null },
+              { lastActivityAt: { lt: new Date(Date.now() - q.lastContactDays * 86400000) } },
+            ],
+          },
+        ],
+      }),
       ...(q.q && {
         OR: [
           { name: { contains: q.q, mode: 'insensitive' } },
           { code: { contains: q.q, mode: 'insensitive' } },
           { taxCode: { contains: q.q } },
           { phone: { contains: q.q } },
-          { contacts: { some: { OR: [{ name: { contains: q.q, mode: 'insensitive' } }, { phone: { contains: q.q } }] } } },
+          {
+            contacts: {
+              some: { OR: [{ name: { contains: q.q, mode: 'insensitive' } }, { phone: { contains: q.q } }] },
+            },
+          },
         ],
       }),
     };
@@ -94,6 +108,8 @@ export class CustomersService {
   }
 
   async create(user: AuthUser, dto: CreateCustomerDto) {
+    if (!seesAll(user) && dto.ownerId && dto.ownerId !== user.id)
+      throw new ForbiddenException('Nhân viên chỉ tạo khách cho mình');
     try {
       const c = await this.prisma.customer.create({
         data: { ...dto, ownerId: dto.ownerId ?? user.id },
@@ -110,6 +126,8 @@ export class CustomersService {
 
   async update(user: AuthUser, id: string, dto: UpdateCustomerDto) {
     await assertCustomerAccess(this.prisma, user, id);
+    if (!seesAll(user) && dto.ownerId !== undefined)
+      throw new ForbiddenException('Chỉ quản lý được chuyển người phụ trách');
     const { tags, ...data } = dto;
     const before = await this.prisma.customer.findUniqueOrThrow({ where: { id } });
 
@@ -133,7 +151,13 @@ export class CustomersService {
     const changes = Object.fromEntries(
       Object.entries(data).filter(([k, v]) => (before as Record<string, unknown>)[k] !== v),
     );
-    await this.audit.log({ userId: user.id, action: 'update', entityType: 'Customer', entityId: id, changes: { ...changes, tags } });
+    await this.audit.log({
+      userId: user.id,
+      action: 'update',
+      entityType: 'Customer',
+      entityId: id,
+      changes: { ...changes, tags },
+    });
     return updated;
   }
 
@@ -158,7 +182,13 @@ export class CustomersService {
       where: { id: contactId, customerId },
       data: { ...data, ...(leftCompany !== undefined && { leftCompanyAt: leftCompany ? new Date() : null }) },
     });
-    await this.audit.log({ userId: user.id, action: 'update', entityType: 'CustomerContact', entityId: contactId, changes: dto });
+    await this.audit.log({
+      userId: user.id,
+      action: 'update',
+      entityType: 'CustomerContact',
+      entityId: contactId,
+      changes: dto,
+    });
     return contact;
   }
 }

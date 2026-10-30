@@ -37,6 +37,7 @@ model User {
   ticketComments  TicketComment[]
   notifications   Notification[]
   auditLogs       AuditLog[]
+  savedFilters    SavedFilter[]
 
   @@map("users")
 }
@@ -102,6 +103,9 @@ model Customer {
   createdAt DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")
   deletedAt DateTime? @map("deleted_at")
+  mergedIntoId String? @map("merged_into_id") @db.Uuid
+  mergedInto Customer? @relation("CustomerMerge", fields: [mergedIntoId], references: [id], onDelete: Restrict)
+  mergedFrom Customer[] @relation("CustomerMerge")
 
   contacts   CustomerContact[]
   tags       CustomerTagRelation[]
@@ -110,6 +114,7 @@ model Customer {
   tasks      Task[]
   tickets    Ticket[]
   executions AutomationExecution[]
+  opportunities Opportunity[]
 
   @@index([ownerId])
   @@index([segment])
@@ -307,12 +312,89 @@ model Task {
   createdBy   User?      @relation("TaskCreator", fields: [createdById], references: [id], onDelete: SetNull)
   createdAt   DateTime   @default(now()) @map("created_at")
   updatedAt   DateTime   @updatedAt @map("updated_at")
+  quoteId     String?    @unique @map("quote_id") @db.Uuid
+  quote       Quote?     @relation(fields: [quoteId], references: [id], onDelete: SetNull)
 
   execution AutomationExecution?
 
   @@index([assigneeId, status, dueAt])
   @@index([customerId])
   @@map("tasks")
+}
+
+// Phase 1: a customer's owner is the single source of sales access.
+enum OpportunityStage {
+  NEW
+  QUALIFIED
+  QUOTED
+  NEGOTIATION
+  WON
+  LOST
+}
+
+enum QuoteStatus {
+  DRAFT
+  SENT
+  ACCEPTED
+  REJECTED
+  SUPERSEDED
+}
+
+model Opportunity {
+  id String @id @default(uuid()) @db.Uuid
+  customerId String @map("customer_id") @db.Uuid
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  title String
+  stage OpportunityStage @default(NEW)
+  value Decimal @default(0) @db.Decimal(18, 2)
+  expectedCloseAt DateTime @map("expected_close_at") @db.Date
+  nextActionAt DateTime @map("next_action_at")
+  lossReason String? @map("loss_reason")
+  version Int @default(1)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  quotes Quote[]
+  @@index([customerId, stage])
+  @@index([stage, nextActionAt])
+  @@map("opportunities")
+}
+
+// Issued versions keep their own customer and line-item snapshots.
+model Quote {
+  id String @id @default(uuid()) @db.Uuid
+  opportunityId String @map("opportunity_id") @db.Uuid
+  opportunity Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Restrict)
+  number String @unique
+  version Int
+  status QuoteStatus @default(DRAFT)
+  customerSnapshot Json @map("customer_snapshot")
+  items Json
+  subtotal Decimal @db.Decimal(18, 2)
+  discountAmount Decimal @map("discount_amount") @db.Decimal(18, 2)
+  vatAmount Decimal @map("vat_amount") @db.Decimal(18, 2)
+  total Decimal @db.Decimal(18, 2)
+  vatPercent Decimal @map("vat_percent") @db.Decimal(5, 2)
+  validUntil DateTime @map("valid_until") @db.Date
+  followUpAt DateTime @map("follow_up_at")
+  notes String?
+  createdAt DateTime @default(now()) @map("created_at")
+  sentAt DateTime? @map("sent_at")
+  task Task?
+  @@unique([opportunityId, version])
+  @@index([status, followUpAt])
+  @@map("quotes")
+}
+
+model SavedFilter {
+  id String @id @default(uuid()) @db.Uuid
+  userId String @map("user_id") @db.Uuid
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name String
+  resource String
+  filters Json
+  createdAt DateTime @default(now()) @map("created_at")
+  @@unique([userId, resource, name])
+  @@map("saved_filters")
 }
 
 // ───────────────────────── Tickets (complaints / requests) ─────────────────────────
