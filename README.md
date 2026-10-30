@@ -17,9 +17,6 @@ Không chỉ lưu thông tin – hệ thống **chủ động** cho nhân viên 
 | Jobs / tự động hóa | Redis + BullMQ (lịch chạy 01:00 hằng ngày, kiểm tra SLA mỗi 15 phút) |
 | Triển khai | Docker Compose + Caddy (HTTPS tự động) trên 1 VPS |
 
-> ⚠️ **Không chạy được trên shared hosting** (cPanel/PHP): hệ thống cần tiến trình Node.js chạy liên tục, PostgreSQL và Redis.
-> Xem các phương án hosting trong [docs/TRIEN-KHAI.md](docs/TRIEN-KHAI.md).
-
 ## Đã có trong bộ khung (chạy được ngay)
 
 - **Đăng nhập & phân quyền** (Admin / Quản lý / Nhân viên CSKH), kiểm tra quyền ở backend; nhân viên chỉ thấy khách mình phụ trách; **audit log** mọi thao tác.
@@ -87,20 +84,5 @@ deploy/                   Caddyfile, script backup
 docs/                     Kiến trúc, lộ trình 30 ngày, triển khai, KPI, mẫu CSV
 ```
 
-## Lệnh thường dùng
 
-| Lệnh | Việc |
-|---|---|
-| `npm test` | Unit test |
-| `npm run test:e2e -w apps/api` | E2E (cần DATABASE_URL tới DB test đã migrate + Redis) |
-| `npm run lint` | Kiểm tra TypeScript cả 2 app |
-| `npm run build` | Build production |
-| `npx prisma migrate dev --name <ten>` (trong `apps/api`) | Tạo migration khi đổi schema |
 
-## Tài liệu
-
-- [Kiến trúc & quyết định kỹ thuật](docs/KIEN-TRUC.md)
-- [Lộ trình 30 ngày cho 3 người + checklist go-live](docs/LO-TRINH-30-NGAY.md)
-- [Triển khai production & lựa chọn hosting](docs/TRIEN-KHAI.md)
-- [Retention Engine, health score & định nghĩa KPI](docs/RETENTION-VA-KPI.md)
-- Mẫu CSV: [khách hàng](docs/import-templates/khach-hang.csv) · [đơn hàng](docs/import-templates/don-hang.csv)
